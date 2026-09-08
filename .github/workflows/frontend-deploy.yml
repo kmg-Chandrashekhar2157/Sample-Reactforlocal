@@ -1,0 +1,336 @@
+name: CI/CD - React IIS (dev)
+
+on:
+  push:
+    branches:
+      - develop
+
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  BUILD_FOLDER: dist
+  IIS_FOLDER: 'C:\inetpub\wwwroot\React POC'
+
+jobs:
+
+  # ============================================================
+  # BUILD REACT APPLICATION
+  # ============================================================
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Checkout source code
+      # ----------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # Setup Node.js
+      # ----------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+
+      # ----------------------------------------------------------
+      # Install dependencies
+      # ----------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          npm ci
+
+
+      # ----------------------------------------------------------
+      # Build React application
+      # ----------------------------------------------------------
+      - name: Build React application
+        run: |
+          npm run build
+
+
+      # ----------------------------------------------------------
+      # Verify React build
+      # ----------------------------------------------------------
+      - name: Verify build output
+        run: |
+
+          $buildPath = "$env:GITHUB_WORKSPACE\${{ env.BUILD_FOLDER }}"
+
+          Write-Host "======================================"
+          Write-Host "React Build Verification"
+          Write-Host "======================================"
+
+          Write-Host "Build path:"
+          Write-Host $buildPath
+
+          if (!(Test-Path $buildPath)) {
+              throw "Build folder does not exist: $buildPath"
+          }
+
+          $files = Get-ChildItem `
+            $buildPath `
+            -Recurse `
+            -File
+
+          Write-Host "Files generated: $($files.Count)"
+
+          if ($files.Count -eq 0) {
+              throw "Build folder is EMPTY!"
+          }
+
+          Write-Host ""
+          Write-Host "Generated files:"
+
+          $files |
+            Select-Object FullName, Length
+
+
+          # ------------------------------------------------------
+          # Verify index.html
+          # ------------------------------------------------------
+
+          $indexFile = Join-Path `
+            $buildPath `
+            "index.html"
+
+          if (!(Test-Path $indexFile)) {
+              throw "index.html was not generated!"
+          }
+
+          Write-Host ""
+          Write-Host "index.html found successfully."
+
+
+      # ----------------------------------------------------------
+      # Upload React build artifact
+      # ----------------------------------------------------------
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: ${{ env.BUILD_FOLDER }}
+
+
+  # ============================================================
+  # DEPLOY TO IIS
+  # ============================================================
+  deploy-dev:
+    needs: build
+
+    runs-on:
+      - self-hosted
+      - windows
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Download frontend artifact
+      # ----------------------------------------------------------
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: C:\temp\frontend-build
+
+
+      # ----------------------------------------------------------
+      # Verify downloaded artifact
+      # ----------------------------------------------------------
+      - name: Verify downloaded artifact
+        run: |
+
+          $buildPath = "C:\temp\frontend-build"
+
+          Write-Host "======================================"
+          Write-Host "Frontend Artifact Verification"
+          Write-Host "======================================"
+
+          Write-Host "Artifact path:"
+          Write-Host $buildPath
+
+          if (!(Test-Path $buildPath)) {
+              throw "Frontend artifact folder does not exist!"
+          }
+
+          $files = Get-ChildItem `
+            $buildPath `
+            -Recurse `
+            -File
+
+          Write-Host "Files downloaded: $($files.Count)"
+
+          if ($files.Count -eq 0) {
+              throw "Frontend artifact folder is EMPTY!"
+          }
+
+          Write-Host ""
+          Write-Host "Downloaded files:"
+
+          $files |
+            Select-Object FullName, Length
+
+
+          # ------------------------------------------------------
+          # Verify index.html
+          # ------------------------------------------------------
+
+          $indexFile = Join-Path `
+            $buildPath `
+            "index.html"
+
+          if (!(Test-Path $indexFile)) {
+              throw "index.html was not found in downloaded artifact!"
+          }
+
+          Write-Host ""
+          Write-Host "index.html found successfully."
+
+
+      # ----------------------------------------------------------
+      # Deploy React application to IIS
+      # ----------------------------------------------------------
+      - name: Deploy React frontend to IIS
+        run: |
+
+          $sourcePath = "C:\temp\frontend-build"
+          $deployPath = "C:\inetpub\wwwroot\React POC"
+
+          Write-Host "======================================"
+          Write-Host "React IIS Deployment"
+          Write-Host "======================================"
+
+          Write-Host "Source:"
+          Write-Host $sourcePath
+
+          Write-Host "Destination:"
+          Write-Host $deployPath
+
+
+          # ------------------------------------------------------
+          # Verify source
+          # ------------------------------------------------------
+
+          if (!(Test-Path $sourcePath)) {
+              throw "Source folder does not exist: $sourcePath"
+          }
+
+          $sourceFiles = Get-ChildItem `
+            $sourcePath `
+            -Recurse `
+            -File
+
+          Write-Host "Files to deploy: $($sourceFiles.Count)"
+
+          if ($sourceFiles.Count -eq 0) {
+              throw "Source folder is empty!"
+          }
+
+
+          # ------------------------------------------------------
+          # Create IIS folder if required
+          # ------------------------------------------------------
+
+          if (!(Test-Path $deployPath)) {
+
+              Write-Host "Deployment folder does not exist."
+
+              New-Item `
+                -ItemType Directory `
+                -Path $deployPath `
+                -Force |
+                Out-Null
+          }
+
+
+          # ------------------------------------------------------
+          # Clean previous deployment
+          # ------------------------------------------------------
+
+          Write-Host "Cleaning old React deployment..."
+
+          Get-ChildItem `
+            $deployPath `
+            -Force |
+            Remove-Item `
+              -Recurse `
+              -Force
+
+
+          # ------------------------------------------------------
+          # Copy new React build
+          # ------------------------------------------------------
+
+          Write-Host "Copying new React build..."
+
+          Copy-Item `
+            "$sourcePath\*" `
+            $deployPath `
+            -Recurse `
+            -Force
+
+
+          # ------------------------------------------------------
+          # Verify deployment
+          # ------------------------------------------------------
+
+          Write-Host "Verifying deployed files..."
+
+          $deployedFiles = Get-ChildItem `
+            $deployPath `
+            -Recurse `
+            -File
+
+          Write-Host "Files deployed: $($deployedFiles.Count)"
+
+          if ($deployedFiles.Count -eq 0) {
+              throw "Deployment folder is empty after copy!"
+          }
+
+
+          # ------------------------------------------------------
+          # Verify index.html
+          # ------------------------------------------------------
+
+          $indexFile = Join-Path `
+            $deployPath `
+            "index.html"
+
+          if (!(Test-Path $indexFile)) {
+              throw "index.html was not found after deployment!"
+          }
+
+          Write-Host ""
+          Write-Host "index.html deployed successfully."
+
+
+          # ------------------------------------------------------
+          # Final verification
+          # ------------------------------------------------------
+
+          Write-Host ""
+          Write-Host "======================================"
+          Write-Host "React IIS Deployment SUCCESS"
+          Write-Host "======================================"
+
+          Write-Host ""
+          Write-Host "IIS Physical Path:"
+          Write-Host $deployPath
+
+          Write-Host ""
+          Write-Host "Total files deployed:"
+          Write-Host $deployedFiles.Count
