@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// The frontend talks to the .NET API over CORS using VITE_API_BASE_URL
+// The frontend talks to the .NET API over CORS using VITE_APP_API
 // (see .env.development). The commented-out proxy below is the alternative
 // if you would rather keep everything same-origin during development.
 export default defineConfig({

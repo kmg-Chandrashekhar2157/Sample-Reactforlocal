@@ -24,7 +24,7 @@ Opens on <http://localhost:5173>. Start the backend too, or the page shows
 
 ## Configuration
 
-`VITE_API_BASE_URL` in `.env.development` points at the backend
+`VITE_APP_API` in `.env.development` points at the backend
 (`http://localhost:5147`). Vite only exposes variables prefixed with `VITE_`, and they
 are inlined at build time — so a change needs a dev-server restart.
 

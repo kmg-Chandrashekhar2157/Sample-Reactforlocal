@@ -2,7 +2,7 @@ import type { HealthResponse, TodoItem } from '../types'
 
 // Empty base URL means "same origin", which is what you want if you switch
 // to the Vite dev-server proxy instead of CORS.
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const BASE_URL = (import.meta.env.VITE_APP_API ?? '').replace(/\/$/, '')
 
 export class ApiError extends Error {
   constructor(

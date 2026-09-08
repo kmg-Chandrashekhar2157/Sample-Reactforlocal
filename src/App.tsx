@@ -74,7 +74,7 @@ export default function App() {
       </main>
 
       <footer className="page__footer muted">
-        API base URL: <code>{import.meta.env.VITE_API_BASE_URL || '(same origin)'}</code>
+        API base URL: <code>{import.meta.env.VITE_APP_API || '(same origin)'}</code>
       </footer>
     </div>
   )
